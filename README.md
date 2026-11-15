@@ -36,7 +36,7 @@ sudo apt-get install -f  # Para resolver dependencias si es necesario
 Opción 2: Desde el código fuente
 1-Clona el repositorio:
 ```bash
-git clone https://github.com/tu-usuario/Argent-Multimedia-Player.git
+git clone https://github.com/Tavo78ok/Argent-Multimedia-Player.git
 cd Argent-Multimedia-Player
 ```
 02-Instala las dependencias del sistema:
