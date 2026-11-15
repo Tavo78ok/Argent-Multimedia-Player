@@ -10,8 +10,7 @@
 
 Combina lo mejor de la reproducción local, el streaming IPTV y la búsqueda nativa de YouTube en una interfaz elegante y fluida.
 
-![Argent Multimedia Player - Pantalla Principal](<img width="1440" height="900" alt="Captura de pantalla_2026-11-14_23-57-09" src="https://github.com/user-attachments/assets/ddbec61a-c1cd-4c4d-ba36-e4a5760af802" />
-)
+<img width="1440" height="900" alt="Captura de pantalla_2026-11-14_23-57-09" src="https://github.com/user-attachments/assets/ddbec61a-c1cd-4c4d-ba36-e4a5760af802" />
 
 ---
 
