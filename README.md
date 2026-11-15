@@ -89,15 +89,19 @@ Tecla	Acción
 
 🧠 Bajo el Capó
 
-UI Moderna: Construida con GTK4 y Libadwaita, con soporte para temas oscuros, claros y del sistema.
+UI Moderna: 
+Construida con GTK4 y Libadwaita, con soporte para temas oscuros, claros y del sistema.
 
-Motor de Video: Utiliza el pipeline de GStreamer con gtk4paintablesink para un renderizado de video suave y acelerado.
+Motor de Video: 
+Utiliza el pipeline de GStreamer con gtk4paintablesink para un renderizado de video suave y acelerado.
 
-Manejo de Errores: Instalación de handlers asíncronos para señales SIGSEGV, SIGABRT y SIGBUS que registran el fallo sin cerrar la aplicación abruptamente.
+Manejo de Errores: 
+Instalación de handlers asíncronos para señales SIGSEGV, SIGABRT y SIGBUS que registran el fallo sin cerrar la aplicación abruptamente.
 
-Asincronía: Carga de listas M3U en hilos secundarios y guardado de datos (debounced) para mantener la interfaz siempre fluida.
+Asincronía: 
+Carga de listas M3U en hilos secundarios y guardado de datos (debounced) para mantener la interfaz siempre fluida.
 
-🤝 Contribuciones
+# 🤝 Contribuciones
 
 Las contribuciones son bienvenidas. Si encuentras un bug o tienes una idea para una nueva característica, siéntete libre de abrir un Issue o enviar un Pull Request.
 
