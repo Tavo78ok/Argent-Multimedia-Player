@@ -70,16 +70,19 @@ chmod +x build-deb.sh
 El script extrae automáticamente la versión del código, valida el archivo .desktop, instala los íconos en las rutas de hicolor, actualiza la caché del sistema y verifica todo con lintian.
 
 ⌨️ Atajos de Teclado
+
 Tecla	Acción
-Espacio	Reproducir / Pausar
-← / →	Retroceder / Adelantar 5 segundos
-N / P	Siguiente / Anterior pista
-Ctrl + O	Abrir archivos multimedia
-F o F11	Pantalla completa
-Escape	Salir de pantalla completa
-Ctrl + Q	Cerrar la aplicación
+
+.Espacio	Reproducir / Pausar
+.← / →	Retroceder / Adelantar 5 segundos
+.N / P	Siguiente / Anterior pista
+.Ctrl + O	Abrir archivos multimedia
+.F o F11	Pantalla completa
+.Escape	Salir de pantalla completa
+.Ctrl + Q	Cerrar la aplicación
 
 🧠 Bajo el Capó
+
 UI Moderna: Construida con GTK4 y Libadwaita, con soporte para temas oscuros, claros y del sistema.
 
 Motor de Video: Utiliza el pipeline de GStreamer con gtk4paintablesink para un renderizado de video suave y acelerado.
@@ -89,6 +92,7 @@ Manejo de Errores: Instalación de handlers asíncronos para señales SIGSEGV, S
 Asincronía: Carga de listas M3U en hilos secundarios y guardado de datos (debounced) para mantener la interfaz siempre fluida.
 
 🤝 Contribuciones
+
 Las contribuciones son bienvenidas. Si encuentras un bug o tienes una idea para una nueva característica, siéntete libre de abrir un Issue o enviar un Pull Request.
 
 📄 Licencia
