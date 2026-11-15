@@ -74,11 +74,17 @@ El script extrae automáticamente la versión del código, valida el archivo .de
 Tecla	Acción
 
 .Espacio	Reproducir / Pausar
+
 .← / →	Retroceder / Adelantar 5 segundos
+
 .N / P	Siguiente / Anterior pista
+
 .Ctrl + O	Abrir archivos multimedia
+
 .F o F11	Pantalla completa
+
 .Escape	Salir de pantalla completa
+
 .Ctrl + Q	Cerrar la aplicación
 
 🧠 Bajo el Capó
