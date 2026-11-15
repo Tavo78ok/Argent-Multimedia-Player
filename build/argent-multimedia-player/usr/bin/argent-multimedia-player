@@ -1,0 +1,3 @@
+#!/bin/sh
+# Wrapper de Argent Multimedia Player (paquete Debian)
+exec python3 "/usr/lib/argent-multimedia-player/argent-multimedia-player.py" "$@"

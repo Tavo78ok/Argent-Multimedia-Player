@@ -1,0 +1,37 @@
+Package: argent-multimedia-player
+Version: 1.3.0
+Section: sound
+Priority: optional
+Architecture: all
+Installed-Size: 316
+Maintainer: Tavo <tavopc@openargentos.local>
+Depends: python3:any,
+ python3-gi,
+ gir1.2-gtk-4.0,
+ gir1.2-adw-1,
+ gir1.2-gstreamer-1.0,
+ gir1.2-gst-plugins-base-1.0,
+ gstreamer1.0-plugins-base,
+ gstreamer1.0-plugins-good
+Recommends: gstreamer1.0-plugins-bad,
+ gstreamer1.0-plugins-ugly,
+ gstreamer1.0-libav,
+ gstreamer1.0-gtk4,
+ python3-mutagen,
+ mpv,
+ yt-dlp,
+ desktop-file-utils
+Suggests: fonts-noto-color-emoji
+Description: Argent Multimedia Player — reproductor multimedia GTK4
+ Reproductor multimedia todo-en-uno construido sobre GTK4, Libadwaita,
+ GStreamer, y con integración nativa para buscar y reproducir contenido
+ de YouTube usando yt-dlp y mpv.
+ .
+ Características principales:
+  * Biblioteca local de audio y video con metadata (mutagen)
+  * IPTV / Listas M3U y M3U8 (HLS)
+  * Buscador nativo de YouTube con miniaturas y soporte de mpv
+  * Equalizador de 10 bandas con presets
+  * Límite de calidad configurable para YouTube (720p, 1080p, etc.)
+  * Control de salvapantallas durante la reproducción
+  * Recuperación automática de video (fallback a mpv si GStreamer falla)

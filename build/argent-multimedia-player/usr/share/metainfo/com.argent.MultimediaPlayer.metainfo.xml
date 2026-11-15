@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.argent.MultimediaPlayer</id>
+  <name>Argent Multimedia Player</name>
+  <summary>Reproductor multimedia todo-en-uno</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <description>
+    <p>
+      Argent Multimedia Player es un reproductor multimedia construido sobre GTK4,
+      Libadwaita y GStreamer. Soporta reproducción local, listas IPTV/M3U,
+      un buscador nativo de YouTube (usando yt-dlp y mpv), y un ecualizador
+      de 10 bandas.
+    </p>
+    <ul>
+      <li>Biblioteca local de audio y video</li>
+      <li>IPTV / M3U (incluye HLS)</li>
+      <li>Buscador nativo de YouTube (bajo consumo de RAM)</li>
+      <li>Equalizador de 10 bandas</li>
+      <li>Límite de calidad configurable para YouTube (720p por defecto)</li>
+    </ul>
+  </description>
+  <launchable type="desktop-id">com.argent.MultimediaPlayer.desktop</launchable>
+  <url type="homepage">https://example.com/argent-multimedia-player</url>
+  <releases>
+    <release version="1.3.0" date="2026-11-15"/>
+  </releases>
+  <content_rating type="oars-1.1"/>
+</component>

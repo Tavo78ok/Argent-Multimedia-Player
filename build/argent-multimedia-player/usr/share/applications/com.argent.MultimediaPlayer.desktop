@@ -1,0 +1,15 @@
+[Desktop Entry]
+Type=Application
+Name=Argent Multimedia Player
+GenericName=Multimedia Player
+Comment=Reproductor local · IPTV · Buscador de YouTube
+Exec=argent-multimedia-player %U
+TryExec=argent-multimedia-player
+Icon=com.argent.MultimediaPlayer
+Terminal=false
+Categories=AudioVideo;Audio;Video;Player;
+MimeType=audio/mpeg;audio/flac;audio/ogg;audio/opus;audio/x-wav;audio/mp4;video/mp4;video/x-matroska;video/webm;video/quicktime;video/mp2t;application/x-mpegurl;audio/x-mpegurl;application/vnd.apple.mpegurl;
+Keywords=multimedia;player;video;audio;iptv;m3u;youtube;stream;mpv;
+StartupNotify=true
+StartupWMClass=com.argent.MultimediaPlayer
+X-GNOME-UsesNotifications=true
