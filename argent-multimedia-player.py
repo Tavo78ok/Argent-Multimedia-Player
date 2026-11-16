@@ -1350,7 +1350,10 @@ class ArgentMultimediaPlayer(Adw.Application):
             print("D-Bus sesión no disponible:", e)
             self._ss_unavailable = True
             return None
+
+        # Agregamos el servicio nativo de XFCE al principio de la lista
         candidates = (
+            ("org.xfce.ScreenSaver", "/org/xfce/ScreenSaver", "org.xfce.ScreenSaver"),
             ("org.freedesktop.ScreenSaver", "/org/freedesktop/ScreenSaver", "org.freedesktop.ScreenSaver"),
             ("org.cinnamon.ScreenSaver", "/org/cinnamon/ScreenSaver", "org.freedesktop.ScreenSaver"),
             ("org.gnome.ScreenSaver", "/org/gnome/ScreenSaver", "org.gnome.ScreenSaver"),
@@ -1364,6 +1367,7 @@ class ArgentMultimediaPlayer(Adw.Application):
                     print(f"Salvapantallas: usando {name} ({iface})")
                     return proxy
             except Exception: continue
+
         try:
             proxy = Gio.DBusProxy.new_sync(bus, Gio.DBusProxyFlags.NONE, None, "org.gnome.SessionManager", "/org/gnome/SessionManager", "org.gnome.SessionManager", None)
             if proxy.get_name_owner():
