@@ -20,7 +20,7 @@ set -euo pipefail
 # ---------------------------------------------------------------------------
 
 MAINTAINER_NAME="Tavo"
-MAINTAINER_EMAIL="tavopc@openargentos.local"
+MAINTAINER_EMAIL="el-tavo78@hotmal.com"
 DEBIAN_DIST="unstable"
 
 PKG_NAME="argent-multimedia-player"
