@@ -106,7 +106,7 @@ Asincronía:
 Las contribuciones son bienvenidas. Si encuentras un bug o tienes una idea para una nueva característica, siéntete libre de abrir un Issue o enviar un Pull Request.
 
 📄 Licencia
-Este proyecto está bajo la Licencia MIT. Consulta el archivo LICENSE para más detalles.
+Este proyecto está bajo la Licencia GPL. Consulta el archivo LICENSE para más detalles.
 
 Hecho con ❤️ y mucho mate en Argentina 🇦🇷.
 
