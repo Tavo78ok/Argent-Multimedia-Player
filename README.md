@@ -87,18 +87,22 @@ Tecla	Acción
 
 * Ctrl + Q	Cerrar la aplicación
 
-# 🧠 Bajo el Capó
+## 🧠 Bajo el Capó
 
-UI Moderna: 
+UI Moderna:
+ 
 Construida con GTK4 y Libadwaita, con soporte para temas oscuros, claros y del sistema.
 
-Motor de Video: 
+Motor de Video:
+ 
 Utiliza el pipeline de GStreamer con gtk4paintablesink para un renderizado de video suave y acelerado.
 
-Manejo de Errores: 
+Manejo de Errores:
+ 
 Instalación de handlers asíncronos para señales SIGSEGV, SIGABRT y SIGBUS que registran el fallo sin cerrar la aplicación abruptamente.
 
-Asincronía: 
+Asincronía:
+ 
 Carga de listas M3U en hilos secundarios y guardado de datos (debounced) para mantener la interfaz siempre fluida.
 
 # 🤝 Contribuciones
