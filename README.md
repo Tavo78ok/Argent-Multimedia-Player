@@ -73,21 +73,21 @@ El script extrae automáticamente la versión del código, valida el archivo .de
 
 Tecla	Acción
 
-.Espacio	Reproducir / Pausar
+* Espacio	Reproducir / Pausar
 
-.← / →	Retroceder / Adelantar 5 segundos
+* ← / →	Retroceder / Adelantar 5 segundos
 
-.N / P	Siguiente / Anterior pista
+* N / P	Siguiente / Anterior pista
 
-.Ctrl + O	Abrir archivos multimedia
+* Ctrl + O	Abrir archivos multimedia
 
-.F o F11	Pantalla completa
+* F o F11	Pantalla completa
 
-.Escape	Salir de pantalla completa
+* Escape	Salir de pantalla completa
 
-.Ctrl + Q	Cerrar la aplicación
+* Ctrl + Q	Cerrar la aplicación
 
-🧠 Bajo el Capó
+# 🧠 Bajo el Capó
 
 UI Moderna: 
 Construida con GTK4 y Libadwaita, con soporte para temas oscuros, claros y del sistema.
