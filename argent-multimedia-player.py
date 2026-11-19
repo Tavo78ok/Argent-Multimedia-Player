@@ -3,7 +3,7 @@
 Argent Multimedia Player
 GTK4 + Libadwaita + GStreamer + WebKitGTK
 
-v1.3.0 — Buscador nativo de YouTube (yt-dlp + mpv) con límite 720p.
+v1.4.0 — Buscador nativo de YouTube (yt-dlp + mpv) con límite 720p.
 """
 
 from __future__ import annotations
@@ -249,7 +249,7 @@ def load_m3u_from_path_or_url(source: str) -> list[dict]:
 class ArgentMultimediaPlayer(Adw.Application):
     APP_ID = "com.argent.MultimediaPlayer"
     APP_NAME = "Argent Multimedia Player"
-    APP_VERSION = "1.3.0"
+    APP_VERSION = "1.4.0"
 
     EQ_BAND_LABELS = ("31", "62", "125", "250", "500", "1k", "2k", "4k", "8k", "16k")
     EQ_PRESETS = {
@@ -2428,42 +2428,69 @@ class ArgentMultimediaPlayer(Adw.Application):
 
     def _open_uri_in_mpv(self, uri: str, title: str = "", position_sec: float = 0.0):
         if not uri: return
+
+        # 1. Chequeo proactivo de dependencias
         if not shutil.which("mpv"):
             self._status("mpv no instalado. sudo apt install mpv")
             print("mpv no encontrado en PATH")
             return
+
+        is_youtube = "youtube.com" in uri or "youtu.be" in uri
+        if is_youtube and not shutil.which("yt-dlp"):
+            self._status("yt-dlp no instalado. sudo apt install yt-dlp")
+            print("yt-dlp no encontrado en PATH")
+            return
+
         if self.is_playing:
             try: self.toggle_play_pause()
             except Exception: pass
+
         cmd = ["mpv"]
-        if shutil.which("yt-dlp"):
+        if is_youtube:
             cmd.append("--ytdl=yes")
-            if "youtube.com" in uri or "youtu.be" in uri:
-                res = self.settings.get("yt_max_res", "720")
-                if res != "auto":
-                    cmd.append(f"--ytdl-format=bestvideo[height<={res}]+bestaudio/best[height<={res}]")
+            res = self.settings.get("yt_max_res", "720")
+            if res != "auto":
+                cmd.append(f"--ytdl-format=bestvideo[height<={res}]+bestaudio/best[height<={res}]")
 
         if position_sec > 0: cmd.append(f"--start={position_sec:.0f}")
         if title: cmd.append(f"--force-media-title={title}")
         cmd.append(uri)
+
         try:
+            # 2. Guardar logs en un archivo para diagnóstico
+            log_path = "/tmp/argent_mpv.log"
+            mpv_log = open(log_path, "w")
             proc = subprocess.Popen(
-                cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                cmd, stdout=mpv_log, stderr=subprocess.STDOUT,
                 start_new_session=True,
             )
             self._status(f"Reproduciendo en mpv: {title or uri[:60]}")
             print(f"mpv lanzado: {' '.join(cmd)}")
+            print(f"Logs de mpv en: {log_path}")
             self._show_mpv_fallback_toast(uri, title)
-            GLib.timeout_add(2000, self._check_mpv_status, proc)
+
+            # 3. Chequeo asíncrono
+            GLib.timeout_add(2500, self._check_mpv_status, proc, mpv_log, log_path)
         except Exception as e:
             print("Error lanzando mpv:", e)
             self._status(f"No se pudo abrir mpv: {e}")
 
-    def _check_mpv_status(self, proc) -> bool:
+    def _check_mpv_status(self, proc, log_file=None, log_path="") -> bool:
         try:
             rc = proc.poll()
             if rc is not None and rc != 0:
-                self._status(f"mpv terminó con código {rc}")
+                self._status(f"mpv falló (código {rc}). Revisá {log_path}")
+                print(f"Error: mpv terminó con código {rc}. Ver {log_path}")
+                # Si falló rápido, mostrar una pista en consola
+                if os.path.exists(log_path):
+                    try:
+                        with open(log_path, "r") as f:
+                            tail = f.readlines()[-5:]
+                        print("Últimas líneas del log de mpv:")
+                        for line in tail: print("  >", line.strip())
+                    except Exception: pass
+            if log_file:
+                log_file.close()
         except Exception:
             pass
         return False

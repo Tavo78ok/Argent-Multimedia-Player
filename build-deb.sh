@@ -368,11 +368,11 @@ Depends: python3:any,
  gir1.2-gstreamer-1.0,
  gir1.2-gst-plugins-base-1.0,
  gstreamer1.0-plugins-base,
- gstreamer1.0-plugins-good
+ gstreamer1.0-plugins-good,
+ gstreamer1.0-gtk4
 Recommends: gstreamer1.0-plugins-bad,
  gstreamer1.0-plugins-ugly,
  gstreamer1.0-libav,
- gstreamer1.0-gtk4,
  python3-mutagen,
  mpv,
  yt-dlp,
@@ -418,6 +418,23 @@ fi
 # AppStream (opcional)
 if command -v appstreamcli >/dev/null 2>&1; then
     appstreamcli refresh-cache --force >/dev/null 2>&1 || true
+fi
+
+# Aviso si yt-dlp es muy viejo (YouTube cambia sus bloqueos seguido)
+if command -v yt-dlp >/dev/null 2>&1; then
+    YTDLP_VER=$(yt-dlp --version 2>/dev/null | head -n1 | tr -d 'v')
+    YTDLP_YEAR=$(echo "$YTDLP_VER" | cut -d. -f1)
+    CURRENT_YEAR=$(date +%Y)
+    case "$YTDLP_YEAR" in
+        ''|*[!0-9]*) YTDLP_YEAR=0 ;;
+    esac
+    if [ "$YTDLP_YEAR" -gt 0 ] && [ "$YTDLP_YEAR" -lt "$CURRENT_YEAR" ]; then
+        echo ""
+        echo "Aviso: tu versión de yt-dlp ($YTDLP_VER) puede estar desactualizada."
+        echo "Si YouTube deja de funcionar en la app, actualizalo con:"
+        echo "  sudo pip install -U yt-dlp --break-system-packages"
+        echo ""
+    fi
 fi
 
 exit 0
