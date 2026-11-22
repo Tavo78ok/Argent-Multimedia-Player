@@ -3,12 +3,12 @@
 Argent Multimedia Player
 GTK4 + Libadwaita + GStreamer + WebKitGTK
 
-v1.4.0 — Buscador nativo de YouTube (yt-dlp + mpv) con límite 720p.
+v1.5.1 — Buscador y descargas nativas de YouTube (yt-dlp + mpv).
 """
 
 from __future__ import annotations
 
-import sys, os, re, json, faulthandler, random, shutil, signal, subprocess, threading, time
+import sys, os, re, json, faulthandler, random, shutil, signal, subprocess, threading, time, datetime
 from dataclasses import dataclass, asdict
 from pathlib import Path
 from urllib.parse import unquote, urlparse, urljoin, quote
@@ -19,11 +19,9 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 gi.require_version("Gst", "1.0")
 from gi.repository import Gtk, Adw, Gio, Gdk, GLib, Gst
-# Forzar la identidad de la aplicación para que XFCE asocie el ícono
 GLib.set_prgname("com.argent.MultimediaPlayer")
 GLib.set_application_name("Argent Multimedia Player")
 
-# Necesario para las miniaturas
 try:
     from gi.repository import GdkPixbuf
     HAS_PIXBUF = True
@@ -51,7 +49,8 @@ VIDEO_EXTS = {".mp4",".mkv",".webm",".avi",".mov",".m4v",".ts",".m2ts"}
 CRASH_MARKER_TTL_SEC = 60
 PLAYBACK_OK_RESET_SEC = 10
 
-# fds pre-abiertos para el signal handler (async-signal-safe)
+YTDLP_BIN_URL = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp"
+
 _crash_marker_fd: int | None = None
 _signal_log_fd: int | None = None
 
@@ -76,7 +75,6 @@ def _init_crash_marker_fd() -> None:
 
 
 def _init_signal_log_fd() -> None:
-    """fd de append para registrar cada señal recibida (diagnóstico)."""
     global _signal_log_fd
     try:
         cfg = Path(GLib.get_user_config_dir()) / "argent-multimedia-player"
@@ -249,7 +247,7 @@ def load_m3u_from_path_or_url(source: str) -> list[dict]:
 class ArgentMultimediaPlayer(Adw.Application):
     APP_ID = "com.argent.MultimediaPlayer"
     APP_NAME = "Argent Multimedia Player"
-    APP_VERSION = "1.4.0"
+    APP_VERSION = "1.5.1"
 
     EQ_BAND_LABELS = ("31", "62", "125", "250", "500", "1k", "2k", "4k", "8k", "16k")
     EQ_PRESETS = {
@@ -261,7 +259,6 @@ class ArgentMultimediaPlayer(Adw.Application):
     }
 
     def __init__(self):
-        # HANDLES_OPEN permite recibir archivos desde el gestor de archivos (Nautilus, etc.)
         super().__init__(application_id=self.APP_ID, flags=Gio.ApplicationFlags.HANDLES_OPEN)
         self.connect("activate", self.on_activate)
         self.connect("open", self.on_open)
@@ -278,6 +275,8 @@ class ArgentMultimediaPlayer(Adw.Application):
         self.crashed_uris_file = self.config_dir / "crashed_uris.json"
         self.crash_state_file = self.config_dir / "crash_state.json"
         self.crash_marker_file = self.config_dir / "crash_marker.json"
+        self.ytdlp_bin_dir = self.config_dir / "bin"
+        self.ytdlp_bin_path = self.ytdlp_bin_dir / "yt-dlp"
         self.config_dir.mkdir(parents=True, exist_ok=True)
 
         self.settings = self._load_settings()
@@ -327,6 +326,8 @@ class ArgentMultimediaPlayer(Adw.Application):
         self._ui_ready: bool = False
         self._eq_preset_dropdown = None
 
+        self._active_downloads: dict = {}
+
         self.playbin: Gst.Element | None = None
         self.bus = None
         self.window: Adw.ApplicationWindow | None = None
@@ -350,6 +351,8 @@ class ArgentMultimediaPlayer(Adw.Application):
         self.yt_results_list: Gtk.ListBox | None = None
         self.yt_quality_dropdown = None
         self.yt_spinner: Gtk.Spinner | None = None
+        self.lbl_ytdlp_ver: Gtk.Label | None = None
+        self.btn_update_ytdlp: Gtk.Button | None = None
 
         self.inicio_stack: Gtk.Stack | None = None
         self.view_stack: Adw.ViewStack | None = None
@@ -667,22 +670,19 @@ class ArgentMultimediaPlayer(Adw.Application):
         self.window.present()
         self._ui_ready = True
         GLib.timeout_add(250, self._update_progress)
+        GLib.timeout_add(1500, self._ensure_ytdlp)
         if os.environ.get("ARGENT_WATCHDOG", "1") != "0":
             self._watchdog_tick()
             GLib.timeout_add_seconds(1, self._watchdog_tick)
         GLib.idle_add(self._check_crash_recovery)
 
     def on_open(self, app, files, n_files, hint):
-        # Si es la primera ejecución, on_activate se encarga de crear la interfaz.
-        # Si la app ya estaba abierta, on_activate solo la trae al frente.
         self.on_activate(app)
-        
         paths = []
         for f in files:
             path = f.get_path()
             if path:
                 paths.append(path)
-                
         if paths:
             self.add_files(paths)
 
@@ -1350,8 +1350,6 @@ class ArgentMultimediaPlayer(Adw.Application):
             print("D-Bus sesión no disponible:", e)
             self._ss_unavailable = True
             return None
-
-        # Agregamos el servicio nativo de XFCE al principio de la lista
         candidates = (
             ("org.xfce.ScreenSaver", "/org/xfce/ScreenSaver", "org.xfce.ScreenSaver"),
             ("org.freedesktop.ScreenSaver", "/org/freedesktop/ScreenSaver", "org.freedesktop.ScreenSaver"),
@@ -1367,7 +1365,6 @@ class ArgentMultimediaPlayer(Adw.Application):
                     print(f"Salvapantallas: usando {name} ({iface})")
                     return proxy
             except Exception: continue
-
         try:
             proxy = Gio.DBusProxy.new_sync(bus, Gio.DBusProxyFlags.NONE, None, "org.gnome.SessionManager", "/org/gnome/SessionManager", "org.gnome.SessionManager", None)
             if proxy.get_name_owner():
@@ -1610,7 +1607,6 @@ class ArgentMultimediaPlayer(Adw.Application):
             return False
         self.iptv_channels = channels
         if source: self._iptv_source = source
-        # Reset filtros al cargar una lista nueva
         if self.iptv_search_entry:
             self.iptv_search_entry.set_text("")
         self._iptv_filter_query = ""
@@ -1699,7 +1695,6 @@ class ArgentMultimediaPlayer(Adw.Application):
             ch = self.iptv_channels[i]
             row = Gtk.ListBoxRow()
             row.channel = ch
-            # Cache para el filtro
             row._iptv_group = ch.get("group") or "Sin grupo"
             row._iptv_search_text = f"{ch.get('name') or ''} {ch.get('group') or ''}".lower()
             box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
@@ -1714,7 +1709,6 @@ class ArgentMultimediaPlayer(Adw.Application):
             box.append(lbl_name)
             box.append(lbl_group)
             row.set_child(box)
-            # Si hay filtro activo, aplicar al vuelo
             if self._iptv_filter_query or self._iptv_filter_group:
                 row.set_visible(self._iptv_row_matches(row))
             self.iptv_list.append(row)
@@ -2100,7 +2094,6 @@ class ArgentMultimediaPlayer(Adw.Application):
         action.append(btn_clear)
         box.append(action)
 
-        # ---- Filtros: búsqueda por texto + filtro por categoría ----
         filter_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         self.iptv_search_entry = Gtk.SearchEntry(placeholder_text="Buscar canal o grupo…")
         self.iptv_search_entry.set_hexpand(True)
@@ -2148,6 +2141,16 @@ class ArgentMultimediaPlayer(Adw.Application):
         lbl.set_hexpand(True)
         header.append(lbl)
 
+        self.lbl_ytdlp_ver = Gtk.Label(label="yt-dlp: ...")
+        self.lbl_ytdlp_ver.add_css_class("dim-label")
+        header.append(self.lbl_ytdlp_ver)
+
+        self.btn_update_ytdlp = Gtk.Button()
+        self.btn_update_ytdlp.set_icon_name("software-update-available-symbolic")
+        self.btn_update_ytdlp.set_tooltip_text("Actualizar yt-dlp (binario oficial)")
+        self.btn_update_ytdlp.connect("clicked", self._on_update_ytdlp_clicked)
+        header.append(self.btn_update_ytdlp)
+
         q_lbl = Gtk.Label(label="Calidad:")
         q_lbl.add_css_class("dim-label")
         header.append(q_lbl)
@@ -2182,7 +2185,7 @@ class ArgentMultimediaPlayer(Adw.Application):
         search_box.append(self.yt_spinner)
         box.append(search_box)
 
-        hint = Gtk.Label(label="Doble clic en un resultado para abrirlo en mpv.")
+        hint = Gtk.Label(label="Doble clic para reproducir · Flecha para descargar (AVC/H.264)")
         hint.add_css_class("dim-label")
         hint.set_halign(Gtk.Align.START)
         box.append(hint)
@@ -2276,7 +2279,111 @@ class ArgentMultimediaPlayer(Adw.Application):
         return box
 
     # ------------------------------------------------------------------
-    # YouTube Search Logic
+    # yt-dlp binario propio (auto-descarga y actualización)
+    # ------------------------------------------------------------------
+
+    def _get_ytdlp_path(self) -> str | None:
+        if self.ytdlp_bin_path.is_file() and os.access(self.ytdlp_bin_path, os.X_OK):
+            return str(self.ytdlp_bin_path)
+        local = Path(os.path.expanduser("~")) / ".local" / "bin" / "yt-dlp"
+        if local.is_file():
+            return str(local)
+        return shutil.which("yt-dlp")
+
+    def _ensure_ytdlp(self) -> bool:
+        if not self.ytdlp_bin_path.is_file():
+            self._status("Descargando yt-dlp por primera vez…")
+            self._download_ytdlp()
+        else:
+            self._check_ytdlp_freshness()
+        self._refresh_ytdlp_ui()
+        return False
+
+    def _download_ytdlp(self):
+        if self.btn_update_ytdlp:
+            self.btn_update_ytdlp.set_sensitive(False)
+        if self.yt_spinner:
+            self.yt_spinner.start()
+            self.yt_spinner.set_visible(True)
+
+        def worker():
+            try:
+                self.ytdlp_bin_dir.mkdir(parents=True, exist_ok=True)
+                req = Request(YTDLP_BIN_URL, headers={"User-Agent": "Mozilla/5.0"})
+                with urlopen(req, timeout=120) as resp:
+                    data = resp.read()
+                tmp = self.ytdlp_bin_path.with_name("yt-dlp.tmp")
+                tmp.write_bytes(data)
+                tmp.chmod(0o755)
+                os.replace(tmp, self.ytdlp_bin_path)
+                GLib.idle_add(self._after_ytdlp_download, True, "")
+            except Exception as e:
+                GLib.idle_add(self._after_ytdlp_download, False, str(e))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _after_ytdlp_download(self, success, err):
+        if self.yt_spinner:
+            self.yt_spinner.stop()
+            self.yt_spinner.set_visible(False)
+        if self.btn_update_ytdlp:
+            self.btn_update_ytdlp.set_sensitive(True)
+        if success:
+            self._status("yt-dlp actualizado.")
+            self._refresh_ytdlp_ui()
+        else:
+            self._status(f"No se pudo descargar yt-dlp: {err}")
+        return False
+
+    def _check_ytdlp_freshness(self):
+        try:
+            res = subprocess.run(
+                [str(self.ytdlp_bin_path), "--version"],
+                capture_output=True, text=True, timeout=10,
+            )
+            ver = res.stdout.strip()
+            if not ver:
+                return
+            parts = ver.split(".")
+            if len(parts) < 3:
+                return
+            vdate = datetime.date(int(parts[0]), int(parts[1]), int(parts[2]))
+            age_days = (datetime.date.today() - vdate).days
+            if age_days > 30:
+                self._status(f"yt-dlp tiene {age_days} días. Actualizando…")
+                self._download_ytdlp()
+        except Exception as e:
+            print(f"Error chequeando yt-dlp: {e}")
+
+    def _refresh_ytdlp_ui(self) -> bool:
+        if not self.lbl_ytdlp_ver:
+            return False
+        path = self._get_ytdlp_path()
+        if not path:
+            self.lbl_ytdlp_ver.set_label("yt-dlp: no instalado")
+            return False
+        try:
+            res = subprocess.run([path, "--version"], capture_output=True, text=True, timeout=5)
+            ver = res.stdout.strip()
+            if ver:
+                self.lbl_ytdlp_ver.set_label(f"yt-dlp: {ver}")
+                parts = ver.split(".")
+                if len(parts) >= 3 and parts[0].isdigit():
+                    vdate = datetime.date(int(parts[0]), int(parts[1]), int(parts[2]))
+                    if (datetime.date.today() - vdate).days > 60:
+                        self.lbl_ytdlp_ver.add_css_class("error")
+                    else:
+                        self.lbl_ytdlp_ver.remove_css_class("error")
+        except Exception:
+            self.lbl_ytdlp_ver.set_label("yt-dlp: error")
+        return False
+
+    def _on_update_ytdlp_clicked(self, btn):
+        self._status("Actualizando yt-dlp…")
+        self._download_ytdlp()
+
+    # ------------------------------------------------------------------
+    # YouTube Search & Descargas
     # ------------------------------------------------------------------
 
     def _on_yt_quality_changed(self, combo, *_):
@@ -2294,8 +2401,10 @@ class ArgentMultimediaPlayer(Adw.Application):
     def _on_yt_search_activate(self, entry, *_):
         query = entry.get_text().strip()
         if not query: return
-        if not shutil.which("yt-dlp"):
-            self._status("yt-dlp no está instalado. Ejecutá: sudo apt install yt-dlp")
+
+        ytdlp_path = self._get_ytdlp_path()
+        if not ytdlp_path:
+            self._status("yt-dlp no instalado. Usá el botón de actualizar.")
             return
 
         while True:
@@ -2311,8 +2420,8 @@ class ArgentMultimediaPlayer(Adw.Application):
 
         def worker():
             try:
-                cmd = ["yt-dlp", f"ytsearch15:{query}", "--dump-json", "--flat-playlist"]
-                result = subprocess.run(cmd, capture_output=True, text=True, check=True, timeout=20)
+                cmd = [ytdlp_path, f"ytsearch15:{query}", "--dump-json", "--flat-playlist"]
+                result = subprocess.run(cmd, capture_output=True, text=True, check=True, timeout=30)
                 items = []
                 for line in result.stdout.strip().split("\n"):
                     if not line: continue
@@ -2368,6 +2477,7 @@ class ArgentMultimediaPlayer(Adw.Application):
             hbox.append(img)
 
             vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+            vbox.set_hexpand(True)
             vbox.set_valign(Gtk.Align.CENTER)
             lbl_t = Gtk.Label(label=item["title"], halign=Gtk.Align.START, wrap=True, max_width_chars=60, lines=2)
             lbl_t.add_css_class("heading")
@@ -2377,10 +2487,47 @@ class ArgentMultimediaPlayer(Adw.Application):
             vbox.append(lbl_c)
             hbox.append(vbox)
 
+            dl_btn = Gtk.MenuButton()
+            dl_btn.set_icon_name("folder-download-symbolic")
+            dl_btn.set_tooltip_text("Descargar")
+            dl_btn.set_valign(Gtk.Align.CENTER)
+            dl_btn.add_css_class("flat")
+
+            popover = Gtk.Popover()
+            pop_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+            pop_box.set_margin_top(6)
+            pop_box.set_margin_bottom(6)
+            pop_box.set_margin_start(6)
+            pop_box.set_margin_end(6)
+
+            vid_id = item["id"]
+            vid_title = item["title"]
+
+            btn_audio = Gtk.Button(label="Solo audio (M4A)")
+            btn_audio.set_has_frame(False)
+            btn_audio.set_halign(Gtk.Align.FILL)
+            btn_audio.connect(
+                "clicked",
+                lambda b, vid=vid_id, t=vid_title: (popover.popdown(), self._start_download(vid, t, "audio")),
+            )
+            pop_box.append(btn_audio)
+
+            btn_video = Gtk.Button(label="Video + audio (MP4 · AVC)")
+            btn_video.set_has_frame(False)
+            btn_video.set_halign(Gtk.Align.FILL)
+            btn_video.connect(
+                "clicked",
+                lambda b, vid=vid_id, t=vid_title: (popover.popdown(), self._start_download(vid, t, "video")),
+            )
+            pop_box.append(btn_video)
+
+            popover.set_child(pop_box)
+            dl_btn.set_popover(popover)
+            hbox.append(dl_btn)
+
             row.set_child(hbox)
             self.yt_results_list.append(row)
 
-            # Usar el ID para una URL de miniatura confiable (JPEG, siempre disponible)
             thumb_url = f"https://i.ytimg.com/vi/{item['id']}/hqdefault.jpg"
             threading.Thread(
                 target=self._load_thumbnail,
@@ -2394,8 +2541,6 @@ class ArgentMultimediaPlayer(Adw.Application):
         if gen != self._yt_search_gen:
             return False
         try:
-            # Quitamos la verificación de get_root() para que no se descarte
-            # si la UI no se dibujó al 100% todavía.
             img_widget.set_paintable(texture)
         except Exception as e:
             print(f"Error aplicando miniatura: {e}")
@@ -2419,6 +2564,153 @@ class ArgentMultimediaPlayer(Adw.Application):
         except Exception as e:
             print(f"Error cargando miniatura ({url}): {e}")
 
+    def _start_download(self, video_id: str, title: str, kind: str):
+        if not video_id:
+            return
+        if video_id in self._active_downloads:
+            self._status(f"'{title}' ya se está descargando.")
+            return
+
+        ytdlp_path = self._get_ytdlp_path()
+        if not ytdlp_path:
+            self._status("yt-dlp no disponible.")
+            return
+
+        if kind == "audio":
+            dest_dir = GLib.get_user_special_dir(GLib.UserDirectory.DIRECTORY_MUSIC)
+            if not dest_dir:
+                dest_dir = str(Path.home() / "Música")
+        else:
+            dest_dir = GLib.get_user_special_dir(GLib.UserDirectory.DIRECTORY_VIDEOS)
+            if not dest_dir:
+                dest_dir = str(Path.home() / "Vídeos")
+
+        try:
+            Path(dest_dir).mkdir(parents=True, exist_ok=True)
+        except Exception as e:
+            self._status(f"No se pudo crear carpeta {dest_dir}: {e}")
+            return
+
+        self._active_downloads[video_id] = {"title": title, "kind": kind, "percent": 0.0}
+        self._status(f"Descargando {kind} de '{title}'…")
+        if self.toast_overlay:
+            toast = Adw.Toast.new(f"Descargando {kind}: {title}")
+            toast.set_timeout(3)
+            self.toast_overlay.add_toast(toast)
+
+        threading.Thread(
+            target=self._download_worker,
+            args=(video_id, title, kind, dest_dir, ytdlp_path),
+            daemon=True,
+        ).start()
+
+    def _download_worker(self, video_id: str, title: str, kind: str, dest_dir: str, ytdlp_path: str):
+        url = f"https://www.youtube.com/watch?v={video_id}"
+        outtmpl = str(Path(dest_dir) / "%(title)s.%(ext)s")
+
+        if kind == "audio":
+            cmd = [
+                ytdlp_path, "-x",
+                "--audio-format", "m4a",
+                "--audio-quality", "0",
+                "-o", outtmpl,
+                "--newline",
+                url,
+            ]
+        else:
+            res = self.settings.get("yt_max_res", "720")
+            # Forzar AVC (H.264) para máxima compatibilidad y menor uso de CPU.
+            # Orden de preferencia:
+            # 1. AVC a la resolución pedida + audio M4A
+            # 2. AVC a la resolución pedida + cualquier audio
+            # 3. AVC en cualquier resolución + audio
+            # 4. Fallback al mejor disponible (videos muy viejos o raros)
+            if res == "auto":
+                fmt = (
+                    "bestvideo[vcodec^=avc1]+bestaudio[ext=m4a]/"
+                    "bestvideo[vcodec^=avc1]+bestaudio/"
+                    "best[vcodec^=avc1]/"
+                    "best"
+                )
+            else:
+                fmt = (
+                    f"bestvideo[height<={res}][vcodec^=avc1]+bestaudio[ext=m4a]/"
+                    f"bestvideo[height<={res}][vcodec^=avc1]+bestaudio/"
+                    f"best[height<={res}][vcodec^=avc1]/"
+                    f"best[height<={res}]"
+                )
+            cmd = [
+                ytdlp_path, "-f", fmt,
+                "--merge-output-format", "mp4",
+                "-o", outtmpl,
+                "--newline",
+                url,
+            ]
+
+        filepath = ""
+        try:
+            env = os.environ.copy()
+            ytdlp_dir = os.path.dirname(ytdlp_path)
+            if ytdlp_dir not in env.get("PATH", "").split(os.pathsep):
+                env["PATH"] = ytdlp_dir + os.pathsep + env.get("PATH", "")
+
+            proc = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,
+                env=env,
+            )
+
+            for line in proc.stdout:
+                line = line.strip()
+                if not line:
+                    continue
+                m = re.search(r"\[download\]\s+(\d+\.?\d*)%", line)
+                if m:
+                    pct = float(m.group(1))
+                    GLib.idle_add(self._on_download_progress, video_id, pct)
+
+            rc = proc.wait()
+
+            if rc == 0:
+                try:
+                    candidates = list(Path(dest_dir).glob(f"*{video_id}*"))
+                    if not candidates:
+                        safe_title = re.sub(r'[<>:"/\\|?*]', '_', title)
+                        candidates = list(Path(dest_dir).glob(f"{safe_title}*"))
+                    if candidates:
+                        filepath = str(max(candidates, key=lambda p: p.stat().st_mtime))
+                except Exception:
+                    pass
+
+            GLib.idle_add(self._on_download_finished, video_id, rc == 0, filepath)
+        except Exception as e:
+            print(f"Error en descarga: {e}")
+            GLib.idle_add(self._on_download_finished, video_id, False, str(e))
+
+    def _on_download_progress(self, video_id, pct):
+        if video_id in self._active_downloads:
+            self._active_downloads[video_id]["percent"] = pct
+            info = self._active_downloads[video_id]
+            self._status(f"Descargando {info['kind']} de '{info['title']}': {pct:.0f}%")
+        return False
+
+    def _on_download_finished(self, video_id, success, info):
+        d = self._active_downloads.pop(video_id, None)
+        if success:
+            title = d["title"] if d else video_id
+            self._status(f"Descarga completada: {title}")
+            if self.toast_overlay:
+                msg = f"Descarga completa: {os.path.basename(info)}" if info else f"Descarga completa: {title}"
+                toast = Adw.Toast.new(msg)
+                toast.set_timeout(8)
+                self.toast_overlay.add_toast(toast)
+        else:
+            self._status(f"Error descargando: {info}")
+        return False
+
     def _on_yt_row_activated(self, listbox, row):
         yt_id = getattr(row, "yt_id", None)
         title = getattr(row, "yt_title", "")
@@ -2428,17 +2720,9 @@ class ArgentMultimediaPlayer(Adw.Application):
 
     def _open_uri_in_mpv(self, uri: str, title: str = "", position_sec: float = 0.0):
         if not uri: return
-
-        # 1. Chequeo proactivo de dependencias
         if not shutil.which("mpv"):
             self._status("mpv no instalado. sudo apt install mpv")
             print("mpv no encontrado en PATH")
-            return
-
-        is_youtube = "youtube.com" in uri or "youtu.be" in uri
-        if is_youtube and not shutil.which("yt-dlp"):
-            self._status("yt-dlp no instalado. sudo apt install yt-dlp")
-            print("yt-dlp no encontrado en PATH")
             return
 
         if self.is_playing:
@@ -2446,30 +2730,34 @@ class ArgentMultimediaPlayer(Adw.Application):
             except Exception: pass
 
         cmd = ["mpv"]
-        if is_youtube:
+        ytdlp_path = self._get_ytdlp_path()
+        if ytdlp_path:
             cmd.append("--ytdl=yes")
-            res = self.settings.get("yt_max_res", "720")
-            if res != "auto":
-                cmd.append(f"--ytdl-format=bestvideo[height<={res}]+bestaudio/best[height<={res}]")
+            if "youtube.com" in uri or "youtu.be" in uri:
+                res = self.settings.get("yt_max_res", "720")
+                if res != "auto":
+                    cmd.append(f"--ytdl-format=bestvideo[height<={res}]+bestaudio/best[height<={res}]")
 
         if position_sec > 0: cmd.append(f"--start={position_sec:.0f}")
         if title: cmd.append(f"--force-media-title={title}")
         cmd.append(uri)
 
         try:
-            # 2. Guardar logs en un archivo para diagnóstico
+            env = os.environ.copy()
+            if ytdlp_path:
+                ytdlp_dir = os.path.dirname(ytdlp_path)
+                if ytdlp_dir not in env.get("PATH", "").split(os.pathsep):
+                    env["PATH"] = ytdlp_dir + os.pathsep + env.get("PATH", "")
+
             log_path = "/tmp/argent_mpv.log"
             mpv_log = open(log_path, "w")
             proc = subprocess.Popen(
                 cmd, stdout=mpv_log, stderr=subprocess.STDOUT,
-                start_new_session=True,
+                start_new_session=True, env=env,
             )
             self._status(f"Reproduciendo en mpv: {title or uri[:60]}")
             print(f"mpv lanzado: {' '.join(cmd)}")
-            print(f"Logs de mpv en: {log_path}")
             self._show_mpv_fallback_toast(uri, title)
-
-            # 3. Chequeo asíncrono
             GLib.timeout_add(2500, self._check_mpv_status, proc, mpv_log, log_path)
         except Exception as e:
             print("Error lanzando mpv:", e)
@@ -2481,7 +2769,6 @@ class ArgentMultimediaPlayer(Adw.Application):
             if rc is not None and rc != 0:
                 self._status(f"mpv falló (código {rc}). Revisá {log_path}")
                 print(f"Error: mpv terminó con código {rc}. Ver {log_path}")
-                # Si falló rápido, mostrar una pista en consola
                 if os.path.exists(log_path):
                     try:
                         with open(log_path, "r") as f:
@@ -2732,6 +3019,7 @@ class ArgentMultimediaPlayer(Adw.Application):
         button.argent-play { min-width: 44px; min-height: 36px; }
         .sidebar { min-width: 168px; }
         .yt-thumb { border-radius: 8px; background-color: #222; }
+        label.error { color: #FF4C4C; }
         """.encode("utf-8")
         provider = Gtk.CssProvider()
         provider.load_from_data(css)
@@ -2753,14 +3041,6 @@ _SIGNAL_NAMES = {
 
 
 def _fatal_signal_handler(signum, frame):
-    """
-    Handler de señales fatales. NO sale del proceso.
-
-    Registra el evento en signals.log y en stderr, escribe el crash_marker
-    sólo para señales realmente fatales, y vuelve normalmente. El main loop
-    continúa (mismo comportamiento efectivo que sys.exit() en signal_notify
-    de GI, que tragaba el SystemExit).
-    """
     try:
         name = _SIGNAL_NAMES.get(signum, str(signum))
         try:

@@ -1,9 +1,9 @@
 Package: argent-multimedia-player
-Version: 1.4.0
+Version: 1.5.1
 Section: sound
 Priority: optional
 Architecture: all
-Installed-Size: 316
+Installed-Size: 328
 Maintainer: Tavo <tavopc@openargentos.local>
 Depends: python3:any,
  python3-gi,

@@ -23,7 +23,7 @@
   <launchable type="desktop-id">com.argent.MultimediaPlayer.desktop</launchable>
   <url type="homepage">https://example.com/argent-multimedia-player</url>
   <releases>
-    <release version="1.4.0" date="2026-11-18"/>
+    <release version="1.5.1" date="2026-11-22"/>
   </releases>
   <content_rating type="oars-1.1"/>
 </component>
